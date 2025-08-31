@@ -6,6 +6,7 @@ import AppLayout from './layouts/AppLayout'
 const Home = lazy(() => import('./pages/Home'))
 const About = lazy(() => import('./pages/About'))
 const Login = lazy(() => import('./pages/Login'))
+const SignUp = lazy(() => import('./pages/SignUp')) // <-- Add SignUp
 const ErrorPage = lazy(() => import('./pages/ErrorPage'))
 
 const App = () => {
@@ -56,6 +57,14 @@ const App = () => {
           element: (
             <Suspense fallback={<div>Loading Login...</div>}>
               <Login />
+            </Suspense>
+          ),
+        },
+        {
+          path: '/signup', // <-- Add Sign Up route
+          element: (
+            <Suspense fallback={<div>Loading Sign Up...</div>}>
+              <SignUp />
             </Suspense>
           ),
         },

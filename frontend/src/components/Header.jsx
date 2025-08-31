@@ -1,26 +1,75 @@
 // src/components/Header.jsx
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, NavLink } from 'react-router-dom'
+import { useAuth } from '../context/auth-context'
+import apiClient from '../api'
 import Icon from './Icon'
 import Search from './Search'
 
 const Header = ({ theme, setTheme, setSearchTerm, searchTerm }) => {
-  const navLinks = [
+  const navigate = useNavigate()
+  const { isAuthenticated, setIsAuthenticated } = useAuth()
+
+  const guestLinks = [
     { path: '/', label: 'Home' },
     { path: '/about', label: 'About' },
     { path: '/login', label: 'Login' },
+    { path: '/signup', label: 'Sign Up' },
   ]
 
+  const authLinks = [
+    { path: '/', label: 'Home' },
+    { path: '/dashboard', label: 'Dashboard' },
+    { path: '/about', label: 'About' },
+  ]
+
+  const navLinks = isAuthenticated ? authLinks : guestLinks
+
+  const handleLogout = async () => {
+    try {
+      await apiClient.post('/auth/logout/')
+    } catch (error) {
+      console.error('Logout failed on server:', error)
+    } finally {
+      setIsAuthenticated(false)
+      navigate('/login')
+    }
+  }
+
+  // ... rest of your JSX remains unchanged
   return (
     <header className="bg-surface-1 col-span-2 flex items-center justify-between px-6 py-4 max-md:flex-col max-md:gap-4">
       {/* Logo + Navigation */}
       <div className="flex items-center gap-4">
-        <Icon name="analytics" className="size-6" />
+        <Link
+          to="/"
+          className="focus:ring-brand/20 inline-flex items-center justify-center rounded p-1 transition duration-300 focus:ring-2 focus:outline-none"
+          aria-label="Go to homepage"
+        >
+          <Icon name="analytics" className="size-6" />
+        </Link>
         <nav className="flex items-center gap-4">
           {navLinks.map((link) => (
-            <Link key={link.path} to={link.path} className="text-sm hover:underline">
+            <NavLink
+              key={link.path}
+              to={link.path}
+              className={({ isActive }) =>
+                `text-sm transition duration-300 hover:underline ${
+                  isActive ? 'text-brand font-bold' : ''
+                }`
+              }
+            >
               {link.label}
-            </Link>
+            </NavLink>
           ))}
+
+          {isAuthenticated && (
+            <button
+              onClick={handleLogout}
+              className="text-sm transition duration-300 hover:underline"
+            >
+              Logout
+            </button>
+          )}
         </nav>
       </div>
 

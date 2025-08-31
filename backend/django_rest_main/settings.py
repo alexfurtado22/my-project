@@ -14,78 +14,115 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 import dj_database_url
+from datetime import timedelta
+
+# ==============================================================================
+# CORE PATHS & ENVIRONMENT LOADING
+# ==============================================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load base env
+# Load .env file from the base directory
 load_dotenv(BASE_DIR / ".env")
 
-# Detect environment
+# Detect environment ('local' or 'prod')
 ENVIRONMENT = os.getenv("ENVIRONMENT", "local").strip().lower()
 
-# Load env-specific overrides
+# Load environment-specific .env file to override settings
 if ENVIRONMENT == "local":
     load_dotenv(BASE_DIR / ".env.local", override=True)
 elif ENVIRONMENT == "prod":
     load_dotenv(BASE_DIR / ".env.docker", override=True)
 
-# --- Security ---
+# ==============================================================================
+# SECURITY & CORE CONFIGURATION
+# ==============================================================================
+
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("No SECRET_KEY set for Django application")
 
-DEBUG = os.getenv("DEBUG", "False").lower() in ("1", "true", "yes")
-
-
-# Extra safety: prevent prod from ever running with DEBUG=True
+DEBUG = ENVIRONMENT == "local"
 if ENVIRONMENT == "prod" and DEBUG:
     raise ValueError("DEBUG must be False in production!")
 
-
 # --- Hosts ---
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
-
-# Strip spaces in case someone writes "example.com, www.example.com"
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS if host.strip()]
-
+if ENVIRONMENT == "local" and not ALLOWED_HOSTS:
+    ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 if ENVIRONMENT == "prod" and not ALLOWED_HOSTS:
     raise ValueError("ALLOWED_HOSTS must be set in production!")
 
-REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework.authentication.SessionAuthentication",
-        "rest_framework.authentication.BasicAuthentication",
-    ),
-    "DEFAULT_PERMISSION_CLASSES": (
-        "rest_framework.permissions.IsAuthenticatedOrReadOnly",
-    ),
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 10,
-    "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
-}
+# --- CORS ---
+CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+CORS_ALLOWED_ORIGINS = [
+    origin.strip() for origin in CORS_ALLOWED_ORIGINS if origin.strip()
+]
+if ENVIRONMENT == "local" and not CORS_ALLOWED_ORIGINS:
+    CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOW_CREDENTIALS = True
+else:
+    if ENVIRONMENT == "prod" and not CORS_ALLOWED_ORIGINS:
+        raise ValueError("CORS_ALLOWED_ORIGINS must be set in production!")
+    CORS_ALLOW_CREDENTIALS = True
 
+# --- CSRF TRUSTED ORIGINS --- (ADD THIS RIGHT HERE)
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
-# Application definition
+# For local development, automatically allow common frontend origins
+if ENVIRONMENT == "local" and not CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS = [
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+    ]
+
+# ==============================================================================
+# INSTALLED APPS
+# ==============================================================================
 
 INSTALLED_APPS = [
-    "blogs.apps.BlogsConfig",
-    "students.apps.StudentsConfig",
-    "api.apps.ApiConfig",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Your apps
+    "blogs.apps.BlogsConfig",
+    "students.apps.StudentsConfig",
+    "api.apps.ApiConfig",
+    # Third-party apps
     "rest_framework",
+    "rest_framework.authtoken",
+    "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "django_filters",
+    "corsheaders",
+    # Allauth & dj-rest-auth
+    "django.contrib.sites",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "dj_rest_auth",
+    "dj_rest_auth.registration",
 ]
 
 if DEBUG:
-    # Add django_browser_reload only in DEBUG mode
-    INSTALLED_APPS += ["django_browser_reload"]
+    INSTALLED_APPS += ["debug_toolbar", "django_browser_reload"]
+
+# ==============================================================================
+# MIDDLEWARE
+# ==============================================================================
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -93,18 +130,21 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "django_browser_reload.middleware.BrowserReloadMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
 ]
+
 if DEBUG:
-    INSTALLED_APPS += ["debug_toolbar"]
-    MIDDLEWARE += ["debug_toolbar.middleware.DebugToolbarMiddleware"]
+    MIDDLEWARE += [
+        "debug_toolbar.middleware.DebugToolbarMiddleware",
+        "django_browser_reload.middleware.BrowserReloadMiddleware",
+    ]
 
-    import socket
-
-    hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
-    INTERNAL_IPS = [ip[:-1] + "1" for ip in ips] + ["127.0.0.1", "192.168.65.1"]
+# ==============================================================================
+# URLS, TEMPLATES, AND WSGI
+# ==============================================================================
 
 ROOT_URLCONF = "django_rest_main.urls"
+WSGI_APPLICATION = "django_rest_main.wsgi.application"
 
 TEMPLATES = [
     {
@@ -121,62 +161,129 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "django_rest_main.wsgi.application"
+# ==============================================================================
+# DATABASE
+# ==============================================================================
 
-
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is required")
 
 DATABASES = {
     "default": dj_database_url.config(
-        default=os.environ.get("DATABASE_URL"),
+        default=DATABASE_URL,
         conn_max_age=600,
-        ssl_require=ENVIRONMENT == "prod",
+        ssl_require=(ENVIRONMENT == "prod"),
     )
 }
 
+# ==============================================================================
+# AUTHENTICATION & API CONFIGURATION
+# ==============================================================================
 
-# customize user model
+SITE_ID = 1
 AUTH_USER_MODEL = "students.UserProfile"
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
 
+ACCOUNT_LOGIN_METHODS = {"email", "username"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+ACCOUNT_EMAIL_VERIFICATION = "none"
 
-# Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticatedOrReadOnly",
+    ),
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10,
+    "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
+}
+
+SIMPLE_JWT = {
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": SECRET_KEY,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+REST_AUTH = {
+    "USE_JWT": True,
+    "TOKEN_MODEL": None,
+    "SESSION_LOGIN": False,
+    "JWT_AUTH_COOKIE": "jwt-access-token",
+    "JWT_AUTH_REFRESH_COOKIE": "jwt-refresh-token",
+    "JWT_AUTH_HTTPONLY": True,
+    "JWT_AUTH_SAMESITE": "Lax",
+    "SIGNUP_FIELDS": {"email": {"required": True}, "username": {"required": True}},
+    "JWT_AUTH_SECURE": not DEBUG,
+    "JWT_AUTH_REFRESH_COOKIE_MAX_AGE": 7 * 24 * 60 * 60,  # 7 days in seconds
+}
+
+# ==============================================================================
+# DYNAMIC SETTINGS (Development vs. Production)
+# ==============================================================================
+
+if DEBUG:
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_HSTS_SECONDS = 0
+    REST_AUTH["JWT_AUTH_SECURE"] = False
+    SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"] = timedelta(hours=2)
+
+    import socket
+
+    hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
+    INTERNAL_IPS = [ip[:-1] + "1" for ip in ips] + ["127.0.0.1"]
+
+else:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "DENY"
+
+    REST_AUTH["JWT_AUTH_SECURE"] = True
+    SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"] = timedelta(minutes=15)
+
+# ==============================================================================
+# PASSWORD VALIDATION
+# ==============================================================================
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
     },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-
-# Internationalization
-# https://docs.djangoproject.com/en/5.2/topics/i18n/
+# ==============================================================================
+# INTERNATIONALIZATION & STATIC FILES
+# ==============================================================================
 
 LANGUAGE_CODE = "en-us"
-
 TIME_ZONE = "UTC"
-
 USE_I18N = True
-
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.2/howto/static-files/
-
 STATIC_URL = "static/"
-
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
+STATIC_ROOT = BASE_DIR / "staticfiles"
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

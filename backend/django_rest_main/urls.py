@@ -20,6 +20,11 @@ from django.urls import path, include
 from django.conf.urls.static import static
 from django.conf import settings
 
+# from rest_framework_simplejwt.views import (
+#     TokenObtainPairView,
+#     TokenRefreshView,
+# )
+
 urlpatterns = [
     # web application endpoint
     path("admin/", admin.site.urls),
@@ -28,7 +33,15 @@ urlpatterns = [
     path("api/v1/", include("api.urls")),
     path("api/v1/blogs/", include("blogs.urls")),  # <-- Add this line
     path("api-auth/", include("rest_framework.urls")),  # enables login in browsable API
+    # path("api/v1/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    # path("api/v1/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    # # dj-rest-auth endpoints
+    path("api/v1/auth/", include("dj_rest_auth.urls")),  # login, logout, user
+    path(
+        "api/v1/auth/registration/", include("dj_rest_auth.registration.urls")
+    ),  # signup
 ]
+
 
 if settings.DEBUG:
     import debug_toolbar
