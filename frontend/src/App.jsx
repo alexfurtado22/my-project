@@ -6,7 +6,10 @@ import AppLayout from './layouts/AppLayout'
 const Home = lazy(() => import('./pages/Home'))
 const About = lazy(() => import('./pages/About'))
 const Login = lazy(() => import('./pages/Login'))
-const SignUp = lazy(() => import('./pages/SignUp')) // <-- Add SignUp
+const SignUp = lazy(() => import('./pages/SignUp'))
+const Dashboard = lazy(() => import('./pages/Dashboard')) // <-- Add this
+const StockView = lazy(() => import('./pages/StockView'))
+const Prediction = lazy(() => import('./pages/Prediction'))
 const ErrorPage = lazy(() => import('./pages/ErrorPage'))
 
 const App = () => {
@@ -65,6 +68,30 @@ const App = () => {
           element: (
             <Suspense fallback={<div>Loading Sign Up...</div>}>
               <SignUp />
+            </Suspense>
+          ),
+        },
+        {
+          path: '/dashboard', // <-- Add Dashboard route
+          element: (
+            <Suspense fallback={<div>Loading Dashboard...</div>}>
+              <Dashboard />
+            </Suspense>
+          ),
+        },
+        {
+          path: '/stock',
+          element: (
+            <Suspense fallback={<div>Loading Stock View...</div>}>
+              <StockView />
+            </Suspense>
+          ),
+        },
+        {
+          path: '/prediction',
+          element: (
+            <Suspense fallback={<div>Loading Stock View...</div>}>
+              <Prediction />
             </Suspense>
           ),
         },

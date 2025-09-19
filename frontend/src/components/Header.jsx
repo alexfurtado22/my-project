@@ -19,6 +19,8 @@ const Header = ({ theme, setTheme, setSearchTerm, searchTerm }) => {
   const authLinks = [
     { path: '/', label: 'Home' },
     { path: '/dashboard', label: 'Dashboard' },
+    { path: '/stock', label: 'Stock' },
+    { path: '/prediction', label: 'Prediction' },
     { path: '/about', label: 'About' },
   ]
 
@@ -28,7 +30,10 @@ const Header = ({ theme, setTheme, setSearchTerm, searchTerm }) => {
     try {
       await apiClient.post('/auth/logout/')
     } catch (error) {
-      console.error('Logout failed on server:', error)
+      // Ignore 401 - it's expected after successful logout
+      if (error.response?.status !== 401) {
+        console.error('Logout error:', error)
+      }
     } finally {
       setIsAuthenticated(false)
       navigate('/login')
